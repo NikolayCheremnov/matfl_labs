@@ -45,7 +45,3 @@ const More = 27
 // 5) special types
 const End = 0
 const Err = -1
-
-// global string
-var sourceModule string
-var lexeme string

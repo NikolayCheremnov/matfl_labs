@@ -1,192 +1,229 @@
 package lexinator
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+	"io"
+	"io/ioutil"
+	"strings"
+)
+
+// scanner structure
+type Scanner struct {
+	sourceModule string // source code
+	textPos      int    // position in text
+	line         int    // line number
+	linePos      int    // position in line
+
+	// the output stream of error messages
+	writer io.Writer
+}
+
+// read source module
+func (S *Scanner) GetData(fname string) (err error) {
+
+	bytes, err := ioutil.ReadFile(fname)
+	if err != nil {
+		return err
+	}
+	S.sourceModule = string(bytes)
+	S.sourceModule = strings.ReplaceAll(S.sourceModule, "\r", "")
+	if len(S.sourceModule) > MaxModuleLen {
+		return errors.New("too long module")
+	}
+	S.sourceModule += "\000" // terminate byte
+	return nil
+}
+
+// the results of the error message
+func (S *Scanner) printError(msg string) {
+	fmt.Fprintf(S.writer, "Error: %s, postion: %d, line: %d, line position: %d\n", msg, S.textPos, S.line, S.linePos)
+}
 
 // scanner function
 // input parameter: source module text, position in text, line index, position in line,
 // output: lexType, lexImage, error and changed parameters
-func Scanner(sourceModule string, textPos int, line int, linePos int) (lexType int, lex string, err error, tP int, l int, lP int) {
-	incPos := func() { textPos++; linePos++ }
-	incLine := func() { line++; linePos = 0 }
-Start:
-	// preparing
-	lex = "" // lexeme image
+func (S *Scanner) Scan() (lexType int, lex string) {
+	incPos := func() { S.textPos++; S.linePos++ }
+	incLine := func() { S.line++; S.linePos = 0 }
 
-	// ignored symbols passing
-	for sourceModule[textPos] == ' ' || sourceModule[textPos] == '\n' || sourceModule[textPos] == '\t' {
-		if sourceModule[textPos] == '\n' {
-			incLine()
-		}
-		incPos()
-	}
+	for {
+		// preparing
+		lex = "" // lexeme image
 
-	// next conditions
-	// 1) is a latin letter
-	if (sourceModule[textPos] >= 'a' && sourceModule[textPos] <= 'z') ||
-		(sourceModule[textPos] >= 'A' && sourceModule[textPos] <= 'Z') {
-		for (sourceModule[textPos] >= 'a' && sourceModule[textPos] <= 'z') ||
-			(sourceModule[textPos] >= 'A' && sourceModule[textPos] <= 'Z') ||
-			(sourceModule[textPos] >= '0' && sourceModule[textPos] <= '9') {
-			lex += sourceModule[textPos : textPos+1] // add symbol to lexeme
-			incPos()
-			if len(lex) > MaxLexLen {
-				return Err, lex, errors.New("too long lexeme"), textPos, line, linePos
+		// ignored symbols passing
+		for S.sourceModule[S.textPos] == ' ' || S.sourceModule[S.textPos] == '\n' || S.sourceModule[S.textPos] == '\t' {
+			if S.sourceModule[S.textPos] == '\n' {
+				incLine()
 			}
-		}
-		// id was retrieved => check keyword
-		switch lex {
-		case "main":
-			return Main, lex, nil, textPos, line, linePos
-		case "int":
-			return Int, lex, nil, textPos, line, linePos
-		case "short":
-			return Short, lex, nil, textPos, line, linePos
-		case "long":
-			return Long, lex, nil, textPos, line, linePos
-		case "bool":
-			return Bool, lex, nil, textPos, line, linePos
-		case "for":
-			return For, lex, nil, textPos, line, linePos
-		case "const":
-			return Const, lex, nil, textPos, line, linePos
-		case "void":
-			return Void, lex, nil, textPos, line, linePos
-		default:
-			return Id, lex, nil, textPos, line, linePos // identifier
-		}
-	}
-
-	// 2) is a digital
-	if sourceModule[textPos] >= '0' && sourceModule[textPos] <= '9' {
-		for sourceModule[textPos] >= '0' && sourceModule[textPos] <= '9' {
-			lex += sourceModule[textPos : textPos+1]
 			incPos()
-			if len(lex) > MaxLexLen {
-				return Err, lex, errors.New("too long lexeme"), textPos, line, linePos
-			}
 		}
-		return IntConst, lex, nil, textPos, line, linePos
-	}
 
-	// 3) single special symbols
-	if sourceModule[textPos] == ';' {
-		lex = sourceModule[textPos : textPos+1]
-		incPos()
-		return Semicolon, lex, nil, textPos, line, linePos
-	} else if sourceModule[textPos] == ',' {
-		lex += sourceModule[textPos : textPos+1]
-		incPos()
-		return Comma, lex, nil, textPos, line, linePos
-	} else if sourceModule[textPos] == '(' {
-		lex += sourceModule[textPos : textPos+1]
-		incPos()
-		return OpeningBracket, lex, nil, textPos, line, linePos
-	} else if sourceModule[textPos] == ')' {
-		lex += sourceModule[textPos : textPos+1]
-		incPos()
-		return ClosingBracket, lex, nil, textPos, line, linePos
-	} else if sourceModule[textPos] == '{' {
-		lex += sourceModule[textPos : textPos+1]
-		incPos()
-		return OpeningBrace, lex, nil, textPos, line, linePos
-	} else if sourceModule[textPos] == '}' {
-		lex += sourceModule[textPos : textPos+1]
-		incPos()
-		return ClosingBrace, lex, nil, textPos, line, linePos
-	} else if sourceModule[textPos] == '+' {
-		lex += sourceModule[textPos : textPos+1]
-		incPos()
-		return Plus, lex, nil, textPos, line, linePos
-	} else if sourceModule[textPos] == '-' {
-		lex += sourceModule[textPos : textPos+1]
-		incPos()
-		return Minus, lex, nil, textPos, line, linePos
-	} else if sourceModule[textPos] == '*' {
-		lex += sourceModule[textPos : textPos+1]
-		incPos()
-		return Mul, lex, nil, textPos, line, linePos
-	} else if sourceModule[textPos] == '%' {
-		lex += sourceModule[textPos : textPos+1]
-		incPos()
-		return Mod, lex, nil, textPos, line, linePos
-	}
-
-	// 4) /
-	if sourceModule[textPos] == '/' {
-		lex = sourceModule[textPos : textPos+1]
-		incPos()
-		if sourceModule[textPos] == '/' { // line comments
-			for sourceModule[textPos] != '\n' {
+		// next conditions
+		// 1) is a latin letter
+		if (S.sourceModule[S.textPos] >= 'a' && S.sourceModule[S.textPos] <= 'z') ||
+			(S.sourceModule[S.textPos] >= 'A' && S.sourceModule[S.textPos] <= 'Z') {
+			for (S.sourceModule[S.textPos] >= 'a' && S.sourceModule[S.textPos] <= 'z') ||
+				(S.sourceModule[S.textPos] >= 'A' && S.sourceModule[S.textPos] <= 'Z') ||
+				(S.sourceModule[S.textPos] >= '0' && S.sourceModule[S.textPos] <= '9') {
+				lex += S.sourceModule[S.textPos : S.textPos+1] // add symbol to lexeme
 				incPos()
-			}
-			incPos()
-			incLine()
-			goto Start
-		} else if sourceModule[textPos] == '*' { // multiline comment
-			incPos()
-			for sourceModule[textPos] != '*' || (sourceModule[textPos] == '*' && sourceModule[textPos+1] != '/') {
-				if sourceModule[textPos] == '\n' {
-					incPos()
-					incLine()
-				} else if sourceModule[textPos] == '\000' {
-					return Err, "", errors.New("unclosed comment in end"), textPos, line, linePos
-				} else {
-					incPos()
+				if len(lex) > MaxLexLen {
+					S.printError("too long lexeme")
+					return Err, lex
 				}
 			}
-			incPos() // eat *
-			incPos() // eat /
-			goto Start
-		} else {
-			return Div, lex, nil, textPos, line, linePos
+			// id was retrieved => check keyword
+			switch lex {
+			case "main":
+				return Main, lex
+			case "int":
+				return Int, lex
+			case "short":
+				return Short, lex
+			case "long":
+				return Long, lex
+			case "bool":
+				return Bool, lex
+			case "for":
+				return For, lex
+			case "const":
+				return Const, lex
+			case "void":
+				return Void, lex
+			default:
+				return Id, lex
+			}
 		}
-	}
 
-	// <
-	if sourceModule[textPos] == '<' {
-		lex = sourceModule[textPos : textPos+1]
-		incPos()
-		if sourceModule[textPos] == '=' {
-			lex += sourceModule[textPos : textPos+1]
+		// 2) is a digital
+		if S.sourceModule[S.textPos] >= '0' && S.sourceModule[S.textPos] <= '9' {
+			for S.sourceModule[S.textPos] >= '0' && S.sourceModule[S.textPos] <= '9' {
+				lex += S.sourceModule[S.textPos : S.textPos+1]
+				incPos()
+				if len(lex) > MaxLexLen {
+					S.printError("too long lexeme")
+					return Err, lex
+				}
+			}
+			return IntConst, lex
+		}
+
+		// 3) single special symbols
+		if S.sourceModule[S.textPos] == ';' {
 			incPos()
-			return LessEqu, lex, nil, textPos, line, linePos
-		} else {
-			return less, lex, nil, textPos, line, linePos
-		}
-	}
-
-	// >
-	if sourceModule[textPos] == '>' {
-		lex = sourceModule[textPos : textPos+1]
-		incPos()
-		if sourceModule[textPos] == '=' {
-			lex += sourceModule[textPos : textPos+1]
+			return Semicolon, ";"
+		} else if S.sourceModule[S.textPos] == ',' {
 			incPos()
-			return MoreEqu, lex, nil, textPos, line, linePos
-		} else {
-			return More, lex, nil, textPos, line, linePos
-		}
-	}
-
-	// =
-	if sourceModule[textPos] == '=' {
-		lex = sourceModule[textPos : textPos+1]
-		incPos()
-		if sourceModule[textPos] == '=' {
-			lex += sourceModule[textPos : textPos+1]
+			return Comma, ","
+		} else if S.sourceModule[S.textPos] == '(' {
 			incPos()
-			return Equ, lex, nil, textPos, line, linePos
-		} else {
-			return Assignment, lex, nil, textPos, line, linePos
+			return OpeningBracket, "("
+		} else if S.sourceModule[S.textPos] == ')' {
+			incPos()
+			return ClosingBracket, ")"
+		} else if S.sourceModule[S.textPos] == '{' {
+			incPos()
+			return OpeningBrace, "{"
+		} else if S.sourceModule[S.textPos] == '}' {
+			incPos()
+			return ClosingBrace, "}"
+		} else if S.sourceModule[S.textPos] == '+' {
+			incPos()
+			return Plus, "+"
+		} else if S.sourceModule[S.textPos] == '-' {
+			incPos()
+			return Minus, "-"
+		} else if S.sourceModule[S.textPos] == '*' {
+			incPos()
+			return Mul, "*"
+		} else if S.sourceModule[S.textPos] == '%' {
+			incPos()
+			return Mod, "%"
 		}
-	}
 
-	// module end
-	if sourceModule[textPos] == '\000' {
-		return End, "null_char", nil, textPos + 1, line, linePos
-	}
+		// 4) /
+		if S.sourceModule[S.textPos] == '/' {
+			lex = S.sourceModule[S.textPos : S.textPos+1]
+			incPos()
+			if S.sourceModule[S.textPos] == '/' { // line comments
+				for S.sourceModule[S.textPos] != '\n' {
+					if S.sourceModule[S.textPos] == '\000' {
+						return End, "null_char"
+					}
+					incPos()
+				}
+				incPos()
+				incLine()
+				continue // go to start again
+			} else if S.sourceModule[S.textPos] == '*' { // multiline comment
+				incPos()
+				for S.sourceModule[S.textPos] != '*' || (S.sourceModule[S.textPos] == '*' && S.sourceModule[S.textPos+1] != '/') {
+					if S.sourceModule[S.textPos] == '\n' {
+						incPos()
+						incLine()
+					} else if S.sourceModule[S.textPos] == '\000' {
+						S.printError("unclosed comment in end")
+						return Err, lex
+					} else {
+						incPos()
+					}
+				}
+				incPos() // eat *
+				incPos() // eat /
+				continue
+			} else {
+				return Div, lex
+			}
+		}
 
-	// error on input
-	incPos()
-	return Err, "", errors.New("invalid input symbol"), textPos, line, linePos
+		// <
+		if S.sourceModule[S.textPos] == '<' {
+			lex = S.sourceModule[S.textPos : S.textPos+1]
+			incPos()
+			if S.sourceModule[S.textPos] == '=' {
+				lex += S.sourceModule[S.textPos : S.textPos+1]
+				incPos()
+				return LessEqu, lex
+			} else {
+				return less, lex
+			}
+		}
+
+		// >
+		if S.sourceModule[S.textPos] == '>' {
+			lex = S.sourceModule[S.textPos : S.textPos+1]
+			incPos()
+			if S.sourceModule[S.textPos] == '=' {
+				lex += S.sourceModule[S.textPos : S.textPos+1]
+				incPos()
+				return MoreEqu, lex
+			} else {
+				return More, lex
+			}
+		}
+
+		// =
+		if S.sourceModule[S.textPos] == '=' {
+			lex = S.sourceModule[S.textPos : S.textPos+1]
+			incPos()
+			if S.sourceModule[S.textPos] == '=' {
+				lex += S.sourceModule[S.textPos : S.textPos+1]
+				incPos()
+				return Equ, lex
+			} else {
+				return Assignment, lex
+			}
+		}
+
+		// module end
+		if S.sourceModule[S.textPos] == '\000' {
+			return End, "null_char"
+		}
+
+		// error on input
+		incPos()
+		S.printError("invalid input symbol: " + string(S.sourceModule[S.textPos]))
+		return Err, string(S.sourceModule[S.textPos])
+	}
 }
