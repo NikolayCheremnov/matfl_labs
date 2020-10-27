@@ -8,7 +8,7 @@ int main() {
     short int _variable2 = 30;      // #1 invalid identify
     long int variable3ы = 404.3;    // #2 invalid identify and dot
     const c = 1;
-    int f = 1
+    int tooLongIdentifyTooLongIdentify = 1; // #
     char c = 'c';                   // #3 char type not added => ' ' absent
 
     // proc call

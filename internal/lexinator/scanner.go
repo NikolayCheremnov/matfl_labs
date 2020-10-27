@@ -27,7 +27,7 @@ func (S *Scanner) GetData(fname string) (err error) {
 		return err
 	}
 	S.sourceModule = string(bytes)
-	S.sourceModule = strings.ReplaceAll(S.sourceModule, "\r", "")
+	S.sourceModule = strings.ReplaceAll(S.sourceModule, "\r", "") // remove excess /r
 	if len(S.sourceModule) > MaxModuleLen {
 		return errors.New("too long module")
 	}
@@ -37,7 +37,10 @@ func (S *Scanner) GetData(fname string) (err error) {
 
 // the results of the error message
 func (S *Scanner) printError(msg string) {
-	fmt.Fprintf(S.writer, "Error: %s, postion: %d, line: %d, line position: %d\n", msg, S.textPos, S.line, S.linePos)
+	_, err := fmt.Fprintf(S.writer, "error: %s postion: %d line: %d line position: %d\n", msg, S.textPos, S.line, S.linePos)
+	if err != nil {
+		panic(err)
+	}
 }
 
 // scanner function
@@ -164,7 +167,7 @@ func (S *Scanner) Scan() (lexType int, lex string) {
 						incLine()
 					} else if S.sourceModule[S.textPos] == '\000' {
 						S.printError("unclosed comment in end")
-						return Err, lex
+						return Err, "/*"
 					} else {
 						incPos()
 					}
@@ -223,7 +226,7 @@ func (S *Scanner) Scan() (lexType int, lex string) {
 
 		// error on input
 		incPos()
-		S.printError("invalid input symbol: " + string(S.sourceModule[S.textPos]))
-		return Err, string(S.sourceModule[S.textPos])
+		S.printError("invalid input symbol: " + S.sourceModule[S.textPos-1:S.textPos])
+		return Err, S.sourceModule[S.textPos-1 : S.textPos]
 	}
 }

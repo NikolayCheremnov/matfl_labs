@@ -6,14 +6,13 @@ import (
 	"os"
 )
 
-func ScannerTesting(srsFileName string, errFileName string) error {
+func ScannerTesting(srsFileName string, errFileName string) (err error) {
 	// writer preparing
 	var w io.Writer
 	if errFileName == "" {
 		w = os.Stdout
 	} else {
-		errFileName, err := os.Create(errFileName)
-		defer errFileName.Close()
+		w, err = os.Create(errFileName)
 		if err != nil {
 			return err
 		}
@@ -21,7 +20,7 @@ func ScannerTesting(srsFileName string, errFileName string) error {
 
 	// scanner preparing
 	S := Scanner{sourceModule: "undefined", textPos: 0, line: 0, linePos: 0, writer: w}
-	err := S.GetData(srsFileName)
+	err = S.GetData(srsFileName)
 	if err != nil {
 		return err
 	}
@@ -31,5 +30,6 @@ func ScannerTesting(srsFileName string, errFileName string) error {
 		lexType, lexImage = S.Scan()
 		fmt.Println(lexImage, " type ", lexType)
 	}
+
 	return nil
 }

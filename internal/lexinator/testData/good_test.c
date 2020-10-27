@@ -26,3 +26,5 @@ int main() {
 void proc(int a, b) {
     int c = a + b;
 }
+
+//final comment without \n
