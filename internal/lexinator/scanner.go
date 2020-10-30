@@ -19,6 +19,31 @@ type Scanner struct {
 	writer io.Writer
 }
 
+// getters and setters
+func (S *Scanner) GetTextPos() int {
+	return S.textPos
+}
+
+func (S *Scanner) GetLine() int {
+	return S.line
+}
+
+func (S *Scanner) GetLinePos() int {
+	return S.linePos
+}
+
+func (S *Scanner) SetTextPos(val int) {
+	S.textPos = val
+}
+
+func (S *Scanner) SetLine(val int) {
+	S.line = val
+}
+
+func (S *Scanner) SetLinePos(val int) {
+	S.linePos = val
+}
+
 // read source module
 func (S *Scanner) GetData(fname string) (err error) {
 
