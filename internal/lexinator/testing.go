@@ -31,5 +31,8 @@ func ScannerTesting(srsFileName string, errFileName string) (err error) {
 		fmt.Println(lexImage, " type ", lexType)
 	}
 
+	fmt.Println("last:")
+	lexType, lexImage = S.Scan()
+	fmt.Println(lexImage, " type ", lexType)
 	return nil
 }

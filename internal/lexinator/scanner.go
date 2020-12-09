@@ -19,6 +19,27 @@ type Scanner struct {
 	writer io.Writer
 }
 
+// initialize function
+func ScannerInitializing(srsFileName string, scannerErrWriter io.Writer) (S Scanner, err error) {
+	S = Scanner{sourceModule: "undefined", textPos: 0, line: 0, linePos: 0, writer: scannerErrWriter}
+	err = S.GetData(srsFileName)
+	if err != nil {
+		return S, err
+	}
+	return S, nil
+}
+
+// store and restore functions
+func (S *Scanner) StorePosValues() (int, int, int) {
+	return S.textPos, S.line, S.linePos
+}
+
+func (S *Scanner) RestorePosValues(textPos int, line int, linePos int) {
+	S.textPos = textPos
+	S.line = line
+	S.linePos = line
+}
+
 // getters and setters
 func (S *Scanner) GetTextPos() int {
 	return S.textPos
@@ -214,7 +235,7 @@ func (S *Scanner) Scan() (lexType int, lex string) {
 				incPos()
 				return LessEqu, lex
 			} else {
-				return less, lex
+				return Less, lex
 			}
 		}
 

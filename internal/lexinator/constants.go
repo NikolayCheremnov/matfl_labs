@@ -39,7 +39,7 @@ const Mod = 22
 const Equ = 23
 const LessEqu = 24
 const MoreEqu = 25
-const less = 26
+const Less = 26
 const More = 27
 
 // 5) special types

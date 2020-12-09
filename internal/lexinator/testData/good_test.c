@@ -17,7 +17,7 @@ int main() {
     variable = c - variable2
     variable3 = (variable / variable2) % c - 10
     // cycle
-    for(int i = 1; i <= 10; i = i + 1) {
+    for(int i = 1; i < 10; i = i + 1) {
         f = f * i
     }
 }
