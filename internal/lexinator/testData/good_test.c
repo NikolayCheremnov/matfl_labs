@@ -1,5 +1,5 @@
 // first good test
-int main() {
+void main() {
     /*write code here
         ...
     */
@@ -12,7 +12,7 @@ int main() {
 
     // proc call
     proc(variable, variable2)
-    
+
     // expressions
     variable = c - variable2
     variable3 = (variable / variable2) % c - 10
