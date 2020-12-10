@@ -1,4 +1,7 @@
 // first good test
+
+const int a = 2;
+
 void main() {
     /*write code here
         ...
@@ -8,22 +11,22 @@ void main() {
     short int variable2 = 30;
     long int variable3 = 404;
     const int c = 1;
-    int f = 1
+    int f = 1;
 
     // proc call
-    proc(variable, variable2)
+    proc(variable, variable2);
 
     // expressions
-    variable = c - variable2
-    variable3 = (variable / variable2) % c - 10
+    variable = c - variable2;
+    variable3 = (variable / variable2) % c - 10;
     // cycle
     for(int i = 1; i < 10; i = i + 1) {
-        f = f * i
+        f = f * i;
     }
 }
 
 // procedure
-void proc(int a, b) {
+void proc(int a, int b) {
     int c = a + b;
 }
 

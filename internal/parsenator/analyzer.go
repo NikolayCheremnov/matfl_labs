@@ -28,14 +28,22 @@ func Preparing(srsFileName string, scannerErrWriter io.Writer, analyzerErrWriter
 }
 
 // the results of the error message
-func (A *Analyzer) printError(msg string) {
+func (A *Analyzer) printPanicError(msg string) {
 	textPos, line, linePos := A.scanner.StorePosValues()
-	_, err := fmt.Fprintf(A.writer, "error: %s postion: %d line: %d line position: %d\n", msg, textPos, line, linePos)
+	_, err := fmt.Fprintf(A.writer, "error: %s position: %d line: %d line position: %d\n", msg, textPos, line, linePos)
 	if err != nil {
 		panic(err)
 	}
 	// maybe temporarily
 	panic(errors.New("completed with an error. see the error logs")) // critical completion
+}
+
+func (A *Analyzer) printError(msg string) {
+	textPos, line, linePos := A.scanner.StorePosValues()
+	_, err := fmt.Fprintf(A.writer, "error: %s position: %d line: %d line position: %d\n", msg, textPos, line, linePos)
+	if err != nil {
+		panic(err)
+	}
 }
 
 // handlers for the nonterminals
@@ -72,23 +80,27 @@ func (A *Analyzer) GlobalDescriptions() error {
 		return branch
 	}
 
-	switch getBranch() {
-	case 1:
-		A.procedureDescription()
-		break
-	case 2:
-		A.description()
-		break
-	case 3:
-		A.scanner.Scan()
-		break
-	case 4:
-		A.scanner.Scan()
-		break
-	case 0:
-		A.printError("invalid program infrastructure")
+	isEnd := false
+	for !isEnd {
+		switch getBranch() {
+		case 1:
+			A.procedureDescription()
+			break
+		case 2:
+			A.description()
+			break
+		case 3:
+			A.scanner.Scan()
+			break
+		case 4:
+			A.scanner.Scan()
+			isEnd = true
+			break
+		case 0:
+			A.printPanicError("invalid program infrastructure")
+		}
 	}
-
+	A.printError("there are no syntax level errors")
 	return nil
 }
 
@@ -101,18 +113,18 @@ func (A *Analyzer) parameterDescription() {
 	for isFirst || lexType == lexinator.Comma {
 		isFirst = false
 		lexType, lex = A.scanner.Scan()
-		if lexType != lexinator.Int && lexType != lexinator.Long || lexType != lexinator.Short || lexType != lexinator.Bool { // int long short bool
-			A.printError("'" + lex + "'" + "does not name a type")
+		if lexType != lexinator.Int && lexType != lexinator.Long && lexType != lexinator.Short && lexType != lexinator.Bool { // int long short bool
+			A.printPanicError("'" + lex + "'" + "does not name a type")
 		}
 		if lexType == lexinator.Long || lexType == lexinator.Short {
 			lexType, lex = A.scanner.Scan()
 			if lexType != lexinator.Int {
-				A.printError("'" + lex + "'" + "does not name a type")
+				A.printPanicError("'" + lex + "'" + "does not name a type")
 			}
 		}
 		lexType, lex = A.scanner.Scan()
 		if lexType != lexinator.Id {
-			A.printError("'" + lex + "' is not an identifier")
+			A.printPanicError("'" + lex + "' is not an identifier")
 		}
 		textPos, line, linePos = A.scanner.StorePosValues()
 		lexType, lex = A.scanner.Scan()
@@ -130,7 +142,7 @@ func (A *Analyzer) parameters() {
 		isFirst = false
 		lexType, lex = A.scanner.Scan()
 		if lexType != lexinator.Id && lexType != lexinator.IntConst {
-			A.printError("'" + lex + "' is not an identifier or constant")
+			A.printPanicError("'" + lex + "' is not an identifier or constant")
 		}
 		textPos, line, linePos = A.scanner.StorePosValues()
 		lexType, lex = A.scanner.Scan()
@@ -142,7 +154,7 @@ func (A *Analyzer) parameters() {
 func (A *Analyzer) simplestExpr() {
 	lexType, lex := A.scanner.Scan()
 	if lexType != lexinator.Id && lexType != lexinator.IntConst && lexType != lexinator.OpeningBracket {
-		A.printError("'" + lex + "' not allowed in the expression")
+		A.printPanicError("'" + lex + "' not allowed in the expression")
 	}
 	if lexType == lexinator.OpeningBracket {
 		A.expression()
@@ -171,11 +183,11 @@ func (A *Analyzer) multiplier() {
 func (A *Analyzer) procedure() {
 	lexType, lex := A.scanner.Scan()
 	if lexType != lexinator.Id {
-		A.printError("'" + lex + "' is not an identifier")
+		A.printPanicError("'" + lex + "' is not an identifier")
 	}
 	lexType, lex = A.scanner.Scan()
 	if lexType != lexinator.OpeningBracket {
-		A.printError("invalid lexeme '" + lex + "', expected '('")
+		A.printPanicError("invalid lexeme '" + lex + "', expected '('")
 	}
 	textPos, line, linePos := A.scanner.StorePosValues()
 	lexType, lex = A.scanner.Scan()
@@ -185,7 +197,7 @@ func (A *Analyzer) procedure() {
 		lexType, lex = A.scanner.Scan()
 	}
 	if lexType != lexinator.ClosingBracket {
-		A.printError("invalid lexeme '" + lex + "', expected ')'")
+		A.printPanicError("invalid lexeme '" + lex + "', expected ')'")
 	}
 }
 
@@ -214,7 +226,7 @@ func (A *Analyzer) expression() {
 	for isFirst || lexType == lexinator.Plus || lexType == lexinator.Minus ||
 		lexType == lexinator.Equ || lexType == lexinator.LessEqu || lexType == lexinator.MoreEqu ||
 		lexType == lexinator.Less || lexType == lexinator.More {
-		isFirst = true
+		isFirst = false
 		A.summand()
 		textPos, line, linePos = A.scanner.StorePosValues()
 		lexType, _ = A.scanner.Scan()
@@ -232,23 +244,23 @@ func (A *Analyzer) forOperator() {
 	} else {
 		if lexType != lexinator.Long && lexType != lexinator.Short &&
 			lexType != lexinator.Int && lexType != lexinator.Bool && lexType != lexinator.Id {
-			A.printError("'" + lex + "' is not an identifier or type")
+			A.printPanicError("'" + lex + "' is not an identifier or type")
 		}
 		if lexType == lexinator.Long || lexType == lexinator.Short {
 			lexType, lex = A.scanner.Scan()
 			if lexType != lexinator.Int {
-				A.printError("'" + lex + "'" + "does not name a type")
+				A.printPanicError("'" + lex + "'" + "does not name a type")
 			}
 		}
 		if lexType != lexinator.Id {
 			lexType, lex = A.scanner.Scan()
 			if lexType != lexinator.Id {
-				A.printError("'" + lex + "' is not an identifier")
+				A.printPanicError("'" + lex + "' is not an identifier")
 			}
 		}
 		lexType, lex = A.scanner.Scan()
 		if lexType != lexinator.Assignment {
-			A.printError("invalid lexeme '" + lex + "', expected '='")
+			A.printPanicError("invalid lexeme '" + lex + "', expected '='")
 		}
 		A.expression()
 	}
@@ -258,11 +270,11 @@ func (A *Analyzer) forOperator() {
 func (A *Analyzer) assigment() {
 	lexType, lex := A.scanner.Scan()
 	if lexType != lexinator.Id {
-		A.printError("'" + lex + "' is not an identifier")
+		A.printPanicError("'" + lex + "' is not an identifier")
 	}
 	lexType, lex = A.scanner.Scan()
 	if lexType != lexinator.Assignment {
-		A.printError("invalid lexeme '" + lex + "', expected '='")
+		A.printPanicError("invalid lexeme '" + lex + "', expected '='")
 	}
 	A.expression()
 }
@@ -271,7 +283,7 @@ func (A *Analyzer) assigment() {
 func (A *Analyzer) variable() {
 	lexType, lex := A.scanner.Scan()
 	if lexType != lexinator.Id {
-		A.printError("'" + lex + "' is not an identifier")
+		A.printPanicError("'" + lex + "' is not an identifier")
 	}
 	textPos, line, linePos := A.scanner.StorePosValues()
 	lexType, lex = A.scanner.Scan()
@@ -286,16 +298,16 @@ func (A *Analyzer) variable() {
 func (A *Analyzer) _for() {
 	lexType, lex := A.scanner.Scan()
 	if lexType != lexinator.For {
-		A.printError("invalid lexeme '" + lex + "', expected 'for'")
+		A.printPanicError("invalid lexeme '" + lex + "', expected 'for'")
 	}
 	lexType, lex = A.scanner.Scan()
 	if lexType != lexinator.OpeningBracket {
-		A.printError("invalid lexeme '" + lex + "', expected '('")
+		A.printPanicError("invalid lexeme '" + lex + "', expected '('")
 	}
 	A.forOperator()
 	lexType, lex = A.scanner.Scan()
 	if lexType != lexinator.Semicolon {
-		A.printError("invalid lexeme '" + lex + "', expected ';'")
+		A.printPanicError("invalid lexeme '" + lex + "', expected ';'")
 	}
 	textPos, line, linePos := A.scanner.StorePosValues()
 	lexType, lex = A.scanner.Scan()
@@ -304,7 +316,7 @@ func (A *Analyzer) _for() {
 		A.expression()
 		lexType, lex = A.scanner.Scan()
 		if lexType != lexinator.Semicolon {
-			A.printError("invalid lexeme '" + lex + "', expected ';'")
+			A.printPanicError("invalid lexeme '" + lex + "', expected ';'")
 		}
 	}
 	textPos, line, linePos = A.scanner.StorePosValues()
@@ -314,7 +326,7 @@ func (A *Analyzer) _for() {
 		A.assigment()
 		lexType, lex = A.scanner.Scan()
 		if lexType != lexinator.ClosingBracket {
-			A.printError("invalid lexeme '" + lex + "', expected ';'")
+			A.printPanicError("invalid lexeme '" + lex + "', expected ';'")
 		}
 	}
 	A.operator()
@@ -324,17 +336,17 @@ func (A *Analyzer) _for() {
 func (A *Analyzer) constants() {
 	lexType, lex := A.scanner.Scan()
 	if lexType != lexinator.Const {
-		A.printError("invalid lexeme '" + lex + "', expected 'const'")
+		A.printPanicError("invalid lexeme '" + lex + "', expected 'const'")
 	}
 	lexType, lex = A.scanner.Scan()
 	if lexType != lexinator.Long && lexType != lexinator.Short &&
 		lexType != lexinator.Int && lexType != lexinator.Bool {
-		A.printError("'" + lex + "'" + "does not name a type")
+		A.printPanicError("'" + lex + "'" + "does not name a type")
 	}
 	if lexType == lexinator.Long || lexType == lexinator.Short {
 		lexType, lex = A.scanner.Scan()
 		if lexType != lexinator.Int {
-			A.printError("'" + lex + "'" + "does not name a type")
+			A.printPanicError("'" + lex + "'" + "does not name a type")
 		}
 	}
 	var textPos, line, linePos int
@@ -353,12 +365,12 @@ func (A *Analyzer) variables() {
 	lexType, lex := A.scanner.Scan()
 	if lexType != lexinator.Long && lexType != lexinator.Short &&
 		lexType != lexinator.Int && lexType != lexinator.Bool {
-		A.printError("'" + lex + "'" + "does not name a type")
+		A.printPanicError("'" + lex + "'" + "does not name a type")
 	}
 	if lexType == lexinator.Long || lexType == lexinator.Short {
 		lexType, lex = A.scanner.Scan()
 		if lexType != lexinator.Int {
-			A.printError("'" + lex + "'" + "does not name a type")
+			A.printPanicError("'" + lex + "'" + "does not name a type")
 		}
 	}
 	var textPos, line, linePos int
@@ -391,14 +403,14 @@ func (A *Analyzer) operator() {
 			A.scanner.RestorePosValues(textPos, line, linePos)
 			A.assigment()
 		} else {
-			A.printError("'" + lex + "' is not an procedure or assigment")
+			A.printPanicError("'" + lex + "' is not an procedure or assigment")
 		}
 		lexType, lex = A.scanner.Scan()
 		if lexType != lexinator.Semicolon {
-			A.printError("invalid lexeme '" + lex + "', expected ';'")
+			A.printPanicError("invalid lexeme '" + lex + "', expected ';'")
 		}
 	} else if lexType != lexinator.Semicolon {
-		A.printError("invalid lexeme '" + lex + "', expected ';'")
+		A.printPanicError("invalid lexeme '" + lex + "', expected ';'")
 	}
 }
 
@@ -406,15 +418,15 @@ func (A *Analyzer) operator() {
 func (A *Analyzer) procedureDescription() {
 	lexType, lex := A.scanner.Scan()
 	if lexType != lexinator.Void { // void
-		A.printError("invalid lexeme '" + lex + "', expected 'void'")
+		A.printPanicError("invalid lexeme '" + lex + "', expected 'void'")
 	}
 	lexType, lex = A.scanner.Scan()
 	if lexType != lexinator.Id { // идентификатор
-		A.printError("'" + lex + "' is not an identifier")
+		A.printPanicError("'" + lex + "' is not an identifier")
 	}
 	lexType, lex = A.scanner.Scan()
 	if lexType != lexinator.OpeningBracket { // (
-		A.printError("invalid lexeme '" + lex + "', expected '('")
+		A.printPanicError("invalid lexeme '" + lex + "', expected '('")
 	}
 	textPos, line, linePos := A.scanner.StorePosValues()
 	lexType, lex = A.scanner.Scan()
@@ -424,10 +436,10 @@ func (A *Analyzer) procedureDescription() {
 		A.parameterDescription()
 		lexType, lex = A.scanner.Scan()
 		if lexType != lexinator.ClosingBracket {
-			A.printError("invalid lexeme '" + lex + "', expected ')'")
+			A.printPanicError("invalid lexeme '" + lex + "', expected ')'")
 		}
 	} else if lexType != lexinator.ClosingBracket { // )
-		A.printError("invalid lexeme '" + lex + "', expected ')'")
+		A.printPanicError("invalid lexeme '" + lex + "', expected ')'")
 	}
 	A.compositeOperator()
 }
@@ -437,12 +449,12 @@ func (A *Analyzer) procedureDescription() {
 func (A *Analyzer) compositeOperator() {
 	lexType, lex := A.scanner.Scan()
 	if lexType != lexinator.OpeningBrace {
-		A.printError("invalid lexeme '" + lex + "', expected '{'")
+		A.printPanicError("invalid lexeme '" + lex + "', expected '{'")
 	}
 	A.operatorsAndDescriptions()
 	lexType, lex = A.scanner.Scan()
 	if lexType != lexinator.ClosingBrace {
-		A.printError("invalid lexeme '" + lex + "', expected '}'")
+		A.printPanicError("invalid lexeme '" + lex + "', expected '}'")
 	}
 }
 
@@ -487,10 +499,10 @@ func (A *Analyzer) description() {
 		A.scanner.RestorePosValues(textPos, line, linePos)
 		A.constants()
 	} else {
-		A.printError("'" + lex + "'" + "does not name a type")
+		A.printPanicError("'" + lex + "'" + "does not name a type")
 	}
 	lexType, lex = A.scanner.Scan()
 	if lexType != lexinator.Semicolon {
-		A.printError("invalid lexeme '" + lex + "', expected ';'")
+		A.printPanicError("invalid lexeme '" + lex + "', expected ';'")
 	}
 }

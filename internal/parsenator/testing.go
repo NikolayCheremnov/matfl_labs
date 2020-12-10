@@ -2,10 +2,11 @@ package parsenator
 
 import (
 	"io"
+	"log"
 	"os"
 )
 
-func GoodTesting() (err error) {
+func Testing(srsFileName string) (err error) {
 	// writers preparing
 	var sw, aw io.Writer
 	sw, err = os.Create("lexinatorErrors.err")
@@ -18,15 +19,25 @@ func GoodTesting() (err error) {
 	}
 
 	// analyzer preparation
-	A, err := Preparing("D:/CherepNick/ASTU/4_course/7_semester/MATFL/labs/internal/lexinator/testData/good_test.c", sw, aw)
+	A, err := Preparing(srsFileName, sw, aw)
 	if err != nil {
 		return nil
 	}
+
+	// deferred call for panic interception
+	defer func() {
+		if err := recover(); err != nil {
+			log.Println("panic occurred in "+srsFileName+":", err)
+		} else {
+			log.Println("there are no errors in " + srsFileName)
+		}
+	}()
 
 	// testing
 	err = A.GlobalDescriptions()
 	if err != nil {
 		return err
 	}
+
 	return nil
 }
