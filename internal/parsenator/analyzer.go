@@ -48,63 +48,37 @@ func (A *Analyzer) printError(msg string) {
 
 // handlers for the nonterminals
 
-// done
-// axiom: <глобальные описания> -> <описание процедуры>|<описание>|;|<main>|e U <глобальные описания>|e
-// input: source module file, stream for write errors
+// <глобальные описания> -> e или <описание процедуры> | <описание> | ; | + <глобальные описания> | e
 func (A *Analyzer) GlobalDescriptions() error {
 	if !A.isPrepared {
 		return errors.New("can't start the analysis: the analyzer is not prepared")
 	}
 
-	// support function
-	getBranch := func() int {
-		textPos, line, linePos := A.scanner.StorePosValues()
-		lexType, _ := A.scanner.Scan()
-		var branch int
-		if lexType == lexinator.Void {
-			branch = 1
+	textPos, line, linePos := A.scanner.StorePosValues()
+	lexType, lex := A.scanner.Scan()
+
+	for lexType != lexinator.End {
+		if lexType == lexinator.Void { // <описание процедуры>
+			A.scanner.RestorePosValues(textPos, line, linePos)
+			A.procedureDescription()
 		} else if lexType == lexinator.Long ||
 			lexType == lexinator.Short ||
 			lexType == lexinator.Int ||
 			lexType == lexinator.Bool ||
-			lexType == lexinator.Const {
-			branch = 2
-		} else if lexType == lexinator.Semicolon {
-			branch = 3
-		} else if lexType == lexinator.End {
-			branch = 4
-		} else {
-			branch = 0 // error branch
-		}
-		A.scanner.RestorePosValues(textPos, line, linePos)
-		return branch
-	}
-
-	isEnd := false
-	for !isEnd {
-		switch getBranch() {
-		case 1:
-			A.procedureDescription()
-			break
-		case 2:
+			lexType == lexinator.Const { // <описание>
+			A.scanner.RestorePosValues(textPos, line, linePos)
 			A.description()
-			break
-		case 3:
-			A.scanner.Scan()
-			break
-		case 4:
-			A.scanner.Scan()
-			isEnd = true
-			break
-		case 0:
-			A.printPanicError("invalid program infrastructure")
+		} else if lexType != lexinator.Semicolon { // then must be ';'
+			A.printPanicError("invalid lexeme '" + lex + "', expected ';'")
 		}
+		textPos, line, linePos = A.scanner.StorePosValues()
+		lexType, lex = A.scanner.Scan()
 	}
 	A.printError("there are no syntax level errors")
 	return nil
 }
 
-// <описание параметров> -> long int | short int | int | bool U идентификатор U , <описание параметров> | e
+// <описание параметров> ->
 func (A *Analyzer) parameterDescription() {
 	var textPos, line, linePos int
 	var lexType int
@@ -112,16 +86,7 @@ func (A *Analyzer) parameterDescription() {
 	isFirst := true
 	for isFirst || lexType == lexinator.Comma {
 		isFirst = false
-		lexType, lex = A.scanner.Scan()
-		if lexType != lexinator.Int && lexType != lexinator.Long && lexType != lexinator.Short && lexType != lexinator.Bool { // int long short bool
-			A.printPanicError("'" + lex + "'" + "does not name a type")
-		}
-		if lexType == lexinator.Long || lexType == lexinator.Short {
-			lexType, lex = A.scanner.Scan()
-			if lexType != lexinator.Int {
-				A.printPanicError("'" + lex + "'" + "does not name a type")
-			}
-		}
+		A._type()
 		lexType, lex = A.scanner.Scan()
 		if lexType != lexinator.Id {
 			A.printPanicError("'" + lex + "' is not an identifier")
@@ -153,25 +118,23 @@ func (A *Analyzer) parameters() {
 // <эл.выр.> -> (<выражение>) | идентификатор | константа
 func (A *Analyzer) simplestExpr() {
 	lexType, lex := A.scanner.Scan()
-	if lexType != lexinator.Id && lexType != lexinator.IntConst && lexType != lexinator.OpeningBracket {
-		A.printPanicError("'" + lex + "' not allowed in the expression")
-	}
-	if lexType == lexinator.OpeningBracket {
+	if lexType == lexinator.OpeningBracket { // ( <выражение> )
 		A.expression()
 		lexType, lex = A.scanner.Scan()
 		if lexType != lexinator.ClosingBracket {
-
+			A.printPanicError("invalid lexeme '" + lex + "', expected ')'")
 		}
+	} else if lexType != lexinator.Id && lexType != lexinator.IntConst {
+		A.printPanicError("'" + lex + "' not allowed in the expression")
 	}
 }
 
 // <множитель> -> <эл.выр.> U e | * U / U % <эл.выр.>
 func (A *Analyzer) multiplier() {
-	var textPos, line, linePos int
-	var lexType int
-	isFirst := true
-	for isFirst || lexType == lexinator.Mul || lexType == lexinator.Div || lexType == lexinator.Mod {
-		isFirst = false
+	A.simplestExpr() // <эл.выр.>
+	textPos, line, linePos := A.scanner.StorePosValues()
+	lexType, _ := A.scanner.Scan()
+	for lexType == lexinator.Mul || lexType == lexinator.Div || lexType == lexinator.Mod {
 		A.simplestExpr()
 		textPos, line, linePos = A.scanner.StorePosValues()
 		lexType, _ = A.scanner.Scan()
@@ -195,19 +158,18 @@ func (A *Analyzer) procedure() {
 		A.scanner.RestorePosValues(textPos, line, linePos)
 		A.parameters()
 		lexType, lex = A.scanner.Scan()
-	}
-	if lexType != lexinator.ClosingBracket {
-		A.printPanicError("invalid lexeme '" + lex + "', expected ')'")
+		if lexType != lexinator.ClosingBracket {
+			A.printPanicError("invalid lexeme '" + lex + "', expected ')'")
+		}
 	}
 }
 
 // <слагаемое> -> <множитель> U +- | e
 func (A *Analyzer) summand() {
-	var textPos, line, linePos int
-	var lexType int
-	isFirst := true
-	for isFirst || lexType == lexinator.Plus || lexType == lexinator.Minus {
-		isFirst = false
+	A.multiplier() // <множитель>
+	textPos, line, linePos := A.scanner.StorePosValues()
+	lexType, _ := A.scanner.Scan()
+	for lexType == lexinator.Plus || lexType == lexinator.Minus {
 		A.multiplier()
 		textPos, line, linePos = A.scanner.StorePosValues()
 		lexType, _ = A.scanner.Scan()
@@ -222,37 +184,27 @@ func (A *Analyzer) expression() {
 	if lexType != lexinator.Plus && lexType != lexinator.Minus {
 		A.scanner.RestorePosValues(textPos, line, linePos)
 	}
-	isFirst := true
-	for isFirst || lexType == lexinator.Plus || lexType == lexinator.Minus ||
+	A.summand() // <слагаемое>
+	textPos, line, linePos = A.scanner.StorePosValues()
+	lexType, _ = A.scanner.Scan()
+	for lexType == lexinator.Plus || lexType == lexinator.Minus ||
 		lexType == lexinator.Equ || lexType == lexinator.LessEqu || lexType == lexinator.MoreEqu ||
 		lexType == lexinator.Less || lexType == lexinator.More {
-		isFirst = false
-		A.summand()
+		A.multiplier()
 		textPos, line, linePos = A.scanner.StorePosValues()
 		lexType, _ = A.scanner.Scan()
 	}
 	A.scanner.RestorePosValues(textPos, line, linePos)
 }
 
-// <оператор for> -> e |
-// long int | short int | int | bool | e U идентификатор = выражение
+// <оператор for>
 func (A *Analyzer) forOperator() {
 	textPos, line, linePos := A.scanner.StorePosValues()
 	lexType, lex := A.scanner.Scan()
-	if lexType == lexinator.Semicolon {
-		A.scanner.RestorePosValues(textPos, line, linePos)
-	} else {
-		if lexType != lexinator.Long && lexType != lexinator.Short &&
-			lexType != lexinator.Int && lexType != lexinator.Bool && lexType != lexinator.Id {
-			A.printPanicError("'" + lex + "' is not an identifier or type")
-		}
-		if lexType == lexinator.Long || lexType == lexinator.Short {
-			lexType, lex = A.scanner.Scan()
-			if lexType != lexinator.Int {
-				A.printPanicError("'" + lex + "'" + "does not name a type")
-			}
-		}
-		if lexType != lexinator.Id {
+	if lexType != lexinator.Semicolon { // if not empty
+		if lexType != lexinator.Id { // if type
+			A.scanner.RestorePosValues(textPos, line, linePos)
+			A._type()
 			lexType, lex = A.scanner.Scan()
 			if lexType != lexinator.Id {
 				A.printPanicError("'" + lex + "' is not an identifier")
@@ -332,23 +284,13 @@ func (A *Analyzer) _for() {
 	A.operator()
 }
 
-// <константы> -> const U long int | short int | int | bool U e | <присваивание> U e | , <присваивание>
+// <константы>
 func (A *Analyzer) constants() {
 	lexType, lex := A.scanner.Scan()
 	if lexType != lexinator.Const {
 		A.printPanicError("invalid lexeme '" + lex + "', expected 'const'")
 	}
-	lexType, lex = A.scanner.Scan()
-	if lexType != lexinator.Long && lexType != lexinator.Short &&
-		lexType != lexinator.Int && lexType != lexinator.Bool {
-		A.printPanicError("'" + lex + "'" + "does not name a type")
-	}
-	if lexType == lexinator.Long || lexType == lexinator.Short {
-		lexType, lex = A.scanner.Scan()
-		if lexType != lexinator.Int {
-			A.printPanicError("'" + lex + "'" + "does not name a type")
-		}
-	}
+	A._type()
 	var textPos, line, linePos int
 	isFirst := true
 	for isFirst || lexType == lexinator.Comma {
@@ -362,24 +304,14 @@ func (A *Analyzer) constants() {
 
 // <переменные> -> long int | short int | int | bool U e | <присваивание> U e | , <присваивание>
 func (A *Analyzer) variables() {
-	lexType, lex := A.scanner.Scan()
-	if lexType != lexinator.Long && lexType != lexinator.Short &&
-		lexType != lexinator.Int && lexType != lexinator.Bool {
-		A.printPanicError("'" + lex + "'" + "does not name a type")
-	}
-	if lexType == lexinator.Long || lexType == lexinator.Short {
-		lexType, lex = A.scanner.Scan()
-		if lexType != lexinator.Int {
-			A.printPanicError("'" + lex + "'" + "does not name a type")
-		}
-	}
-	var textPos, line, linePos int
+	A._type()
+	var lexType, textPos, line, linePos int
 	isFirst := true
 	for isFirst || lexType == lexinator.Comma {
 		isFirst = false
 		A.variable()
 		textPos, line, linePos = A.scanner.StorePosValues()
-		lexType, lex = A.scanner.Scan()
+		lexType, _ = A.scanner.Scan()
 	}
 	A.scanner.RestorePosValues(textPos, line, linePos)
 }
@@ -388,18 +320,18 @@ func (A *Analyzer) variables() {
 func (A *Analyzer) operator() {
 	textPos, line, linePos := A.scanner.StorePosValues()
 	lexType, lex := A.scanner.Scan()
-	if lexType == lexinator.OpeningBrace {
+	if lexType == lexinator.OpeningBrace { // составной оператор
 		A.scanner.RestorePosValues(textPos, line, linePos)
 		A.compositeOperator()
-	} else if lexType == lexinator.For {
+	} else if lexType == lexinator.For { // for
 		A.scanner.RestorePosValues(textPos, line, linePos)
 		A._for()
-	} else if lexType == lexinator.Id {
+	} else if lexType == lexinator.Id { // процедура или присваивание
 		lexType, lex = A.scanner.Scan()
-		if lexType == lexinator.OpeningBracket {
+		if lexType == lexinator.OpeningBracket { // процедура
 			A.scanner.RestorePosValues(textPos, line, linePos)
 			A.procedure()
-		} else if lexType == lexinator.Assignment {
+		} else if lexType == lexinator.Assignment { // присваивание
 			A.scanner.RestorePosValues(textPos, line, linePos)
 			A.assigment()
 		} else {
@@ -414,7 +346,7 @@ func (A *Analyzer) operator() {
 	}
 }
 
-// <описание процедуры> -> void идентификатор ( + <описание параметров> | e + ) <составной оператор>
+// <описание процедуры> -> void идентификатор ( U <описание параметров> | e U ) <составной оператор>
 func (A *Analyzer) procedureDescription() {
 	lexType, lex := A.scanner.Scan()
 	if lexType != lexinator.Void { // void
@@ -444,7 +376,6 @@ func (A *Analyzer) procedureDescription() {
 	A.compositeOperator()
 }
 
-// done
 // <составной оператор> -> { <операторы и описания> }
 func (A *Analyzer) compositeOperator() {
 	lexType, lex := A.scanner.Scan()
@@ -460,27 +391,18 @@ func (A *Analyzer) compositeOperator() {
 
 // <операторы и описания> -> e | <операторы> U e | <операторы и описания>  | <описания> + e | <операторы и описания>
 func (A *Analyzer) operatorsAndDescriptions() {
-	// support functions
-	isOperatorNext := func() bool {
+	for {
 		textPos, line, linePos := A.scanner.StorePosValues()
 		lexType, _ := A.scanner.Scan()
 		A.scanner.RestorePosValues(textPos, line, linePos)
-		return lexType == lexinator.OpeningBrace || lexType == lexinator.For ||
-			lexType == lexinator.Id || lexType == lexinator.Semicolon
-	}
-	isDescriptionNext := func() bool {
-		textPos, line, linePos := A.scanner.StorePosValues()
-		lexType, _ := A.scanner.Scan()
-		A.scanner.RestorePosValues(textPos, line, linePos)
-		return lexType == lexinator.Long || lexType == lexinator.Short ||
-			lexType == lexinator.Int || lexType == lexinator.Bool || lexType == lexinator.Const
-	}
-
-	for isOperatorNext() || isDescriptionNext() {
-		if isOperatorNext() {
+		if lexType == lexinator.OpeningBrace || lexType == lexinator.For ||
+			lexType == lexinator.Id || lexType == lexinator.Semicolon { // if operator
 			A.operator()
-		} else {
+		} else if lexType == lexinator.Long || lexType == lexinator.Short ||
+			lexType == lexinator.Int || lexType == lexinator.Bool || lexType == lexinator.Const { // if description
 			A.description()
+		} else { // e
+			break
 		}
 	}
 }
@@ -504,5 +426,19 @@ func (A *Analyzer) description() {
 	lexType, lex = A.scanner.Scan()
 	if lexType != lexinator.Semicolon {
 		A.printPanicError("invalid lexeme '" + lex + "', expected ';'")
+	}
+}
+
+// <тип> -> long int | short int | int | bool
+func (A *Analyzer) _type() {
+	lexType, lex := A.scanner.Scan()
+	if lexType != lexinator.Long && lexType != lexinator.Short &&
+		lexType != lexinator.Int && lexType != lexinator.Bool {
+		A.printPanicError("'" + lex + "'" + "does not name a type")
+	} else if lexType == lexinator.Long || lexType == lexinator.Short {
+		lexType, lex = A.scanner.Scan()
+		if lexType != lexinator.Int {
+			A.printPanicError("invalid lexeme '" + lex + "', expected 'int'")
+		}
 	}
 }
